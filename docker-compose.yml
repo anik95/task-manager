@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:18
+    container_name: task-manager-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_PORT}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    # App runs `select 1` on boot and exits if Postgres isn't accepting connections yet.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+  # redis:
+  #   image: redis:8
+  #   container_name: url-shortener-redis
+  #   ports:
+  #     - '${REDIS_PORT}:6379'
+
+volumes:
+  pgdata:
