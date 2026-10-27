@@ -2,19 +2,25 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { CreateAuthDto } from './dto/create-auth.dto.js';
 import { UpdateAuthDto } from './dto/update-auth.dto.js';
 import { type Database, DRIZZLE } from '../database/database.module.js';
-import { hashString } from '../utils/crypt.js';
+import { compareHash, hashString } from '../utils/crypt.js';
 import { users } from '../database/schema.js';
+import { SignInDto } from './dto/sign-in.dto.js';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  async create(createAuthDto: CreateAuthDto) {
+  async register(createAuthDto: CreateAuthDto) {
     const { email, password } = createAuthDto;
     const userExists = await this.db.query.users.findFirst({
       where: { email: email },
@@ -41,19 +47,25 @@ export class AuthService {
     return newUser;
   }
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+  async signin(signInDto: SignInDto) {
+    const { email, password, rememberMe } = signInDto;
+    const user = await this.db.query.users.findFirst({
+      where: { email: email },
+    });
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+    const isPasswordValid = await compareHash(password, user.passwordHash);
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const jwtPayload = { sub: user.id, role: user.role }; //dont use email in payload, since email can be changed by user, and we want to keep the payload consistent. Use id instead, since it is unique and never changes.
+
+    const token = await this.jwtService.signAsync(jwtPayload);
+    return { accessToken: token };
   }
 }
